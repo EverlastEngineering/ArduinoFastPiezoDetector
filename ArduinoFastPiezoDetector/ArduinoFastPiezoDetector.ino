@@ -111,6 +111,9 @@ void loop () {
 
 #define MIN_THRESHOLD 150
 
+//#define SERIAL_PLOT_MODE
+
+#ifndef SERIAL_PLOT_MODE
   for (int i = 0; i<2; i++) {
   if (adcValue[i] > MIN_THRESHOLD)
     {
@@ -122,20 +125,24 @@ void loop () {
     }
   }
 
-//  Serial.print (" MissedSamples: ");
-//  Serial.print (missedSamples);
+#else
+  Serial.print ("MissedSamples:");
+  Serial.print (missedSamples);
 //  Serial.print ("Counter:");
 //  Serial.print (counter);
-//  Serial.print (",Pin0:");
-//  Serial.print (adcValue[0]);
-//  Serial.print (",Pin1:");
-//  Serial.print (adcValue[1]);
+  Serial.print (",Pin0:");
+  Serial.print (adcValue[0]);
+  Serial.print (",Pin1:");
+  Serial.print (adcValue[1]);
 //  Serial.print (",Pin2:");
 //  Serial.print (adcValue[2]);
 //  Serial.print (",Pin3:");
 //  Serial.print (adcValue[3]);
-//  Serial.println ();
-  
+  Serial.print (",ForScaling:");
+  Serial.print ("1023");
+  Serial.println ();
+
+#endif
   counter = missedSamples = 0;
   
 /* This delay is very specific to the frequency of the pieze sensor being monitored.

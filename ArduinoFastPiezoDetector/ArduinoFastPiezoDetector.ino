@@ -109,22 +109,32 @@ void loop () {
     results[0] = results1[0] = results2[0] = results3[0] = 0;
   inLoop = false;
 
-  
-  
+#define MIN_THRESHOLD 150
 
-  Serial.print (" MissedSamples: ");
-  Serial.print (missedSamples);
-  Serial.print (" Counter: ");
-  Serial.print (counter);
-  Serial.print (" Result on display pin 0: ");
-  Serial.print (adcValue[0]);
-  Serial.print (" Result on display pin 1: ");
-  Serial.print (adcValue[1]);
-  Serial.print (" Result on display pin 2: ");
-  Serial.print (adcValue[2]);
-  Serial.print (" Result on display pin 3: ");
-  Serial.print (adcValue[3]);
-  Serial.println ();
+  for (int i = 0; i<2; i++) {
+  if (adcValue[i] > MIN_THRESHOLD)
+    {
+      Serial.print ("Pin ");
+      Serial.print (i);
+      Serial.print (": ");
+      Serial.println(adcValue[i]);
+      
+    }
+  }
+
+//  Serial.print (" MissedSamples: ");
+//  Serial.print (missedSamples);
+//  Serial.print ("Counter:");
+//  Serial.print (counter);
+//  Serial.print (",Pin0:");
+//  Serial.print (adcValue[0]);
+//  Serial.print (",Pin1:");
+//  Serial.print (adcValue[1]);
+//  Serial.print (",Pin2:");
+//  Serial.print (adcValue[2]);
+//  Serial.print (",Pin3:");
+//  Serial.print (adcValue[3]);
+//  Serial.println ();
   
   counter = missedSamples = 0;
   
@@ -134,6 +144,6 @@ void loop () {
 // Keep this delay low enough that the buffers will not overfill, ie, skippedSamples remains 0.
 */
 #define MINIMUM_FREQUENCY 190
-  delay(100);
+  delay(10);
   
 }

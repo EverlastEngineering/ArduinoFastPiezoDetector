@@ -3,7 +3,7 @@ const byte adcPin1 = 1;  // A1
 const byte adcPin2 = 2;  // A2
 const byte adcPin3 = 3;  // A3
 
-const int MAX_RESULTS = 128;
+const int MAX_RESULTS = 1;
 
 volatile int counter = 0;
 volatile int missedSamples = 0;
@@ -54,29 +54,29 @@ ISR (ADC_vect) {
       missedSamples++;
       return;
     }
-    if (resultNumber1 >= MAX_RESULTS) {
-      skippedSamples++;
-      return;
-    }
 
     switch(currentPin) {
       case 0:
-        results [resultNumber++] = ADC;
+        if (ADC > results [0])
+          results [0] = ADC;
         ADMUX = bit (REFS0) | (adcPin1 & 7);
         currentPin = 1;
         break;
       case 1:     
-          results1 [resultNumber1++] = ADC;
+        if (ADC > results1 [0])
+          results1 [0] = ADC;
         ADMUX = bit (REFS0) | (adcPin2 & 7);
         currentPin = 2;
         break;
       case 2:
-        results2 [resultNumber2++] = ADC;
+        if (ADC > results2 [0])
+          results2 [0] = ADC;
         ADMUX = bit (REFS0) | (adcPin3 & 7);
         currentPin = 3;
         break;
       case 3:
-        results3 [resultNumber3++] = ADC;
+        if (ADC > results3 [0])
+          results3 [0] = ADC;
         ADMUX = bit (REFS0) | (adcPin0 & 7);
         currentPin = 0;
         break;
@@ -87,50 +87,46 @@ EMPTY_INTERRUPT (TIMER1_COMPB_vect);
 
 
 void loop () {
-  int result;
-  int samples;
   
   inLoop = true;
 
   // tests show this loop causes ~43 missedSamples. The number of samples skipped is less than the number sampled OUTSIDE this loop, so an alternating set of buffers would
   // recover these otherwise lost samples, but we don't have enough memory to have a complete second set of buffers
+  //  original looping
+  // MissedSamples: 43 SkippedSamples: 0 Counter: 342 Samples: 92 Result on display pin: 361
+  // 
+  
+  // on-the-fly-averaging
+  // MissedSamples: 0  SkippedSamples: 0 Counter: 289 Samples: 92 Result on display pin: 3
+  // 12500 alternating samples per channel with 4 channels
 
-  for (int i = 0; i < resultNumber1; i++) {
-    if (results[i] > adcValue[0])
-      adcValue[0] = results[i];
-    results[i] = 0;
 
-    if (results1[i] > adcValue[1])
-      adcValue[1] = results1[i];
-    results1[i] = 0;
 
-    if (results2[i] > adcValue[2])
-        adcValue[2] = results2[i];
-    results2[i] = 0;
-    
-    if (results3[i] > adcValue[2])
-        adcValue[3] = results3[i];
-    results3[i] = 0;
-  }
-
-  samples = resultNumber1;
-  result = adcValue[1];
-  resultNumber = resultNumber1 = resultNumber2 = resultNumber3 = 0;
+    adcValue[0] = results[0];
+    adcValue[1] = results1[0];
+    adcValue[2] = results2[0];
+    adcValue[3] = results3[0];
+    results[0] = results1[0] = results2[0] = results3[0] = 0;
   inLoop = false;
+
+  
+  
 
   Serial.print (" MissedSamples: ");
   Serial.print (missedSamples);
-  Serial.print (" SkippedSamples: ");
-  Serial.print (skippedSamples);
   Serial.print (" Counter: ");
   Serial.print (counter);
-  Serial.print (" Samples: ");
-  Serial.print (samples);
-  Serial.print (" Result on display pin: ");
-  Serial.print (result);
+  Serial.print (" Result on display pin 0: ");
+  Serial.print (adcValue[0]);
+  Serial.print (" Result on display pin 1: ");
+  Serial.print (adcValue[1]);
+  Serial.print (" Result on display pin 2: ");
+  Serial.print (adcValue[2]);
+  Serial.print (" Result on display pin 3: ");
+  Serial.print (adcValue[3]);
   Serial.println ();
   
-  counter = missedSamples = skippedSamples = 0;
+  counter = missedSamples = 0;
   
 /* This delay is very specific to the frequency of the pieze sensor being monitored.
 // Frequencies below this minimum are not guarenteed to register.
@@ -138,6 +134,6 @@ void loop () {
 // Keep this delay low enough that the buffers will not overfill, ie, skippedSamples remains 0.
 */
 #define MINIMUM_FREQUENCY 190
-  delay(1000/MINIMUM_FREQUENCY);
+  delay(100);
   
 }

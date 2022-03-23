@@ -5,7 +5,9 @@ const byte adcPin3 = 3;  // A3
 
 const int MAX_RESULTS = 128;
 
-volatile int counter;
+volatile int counter = 0;
+volatile int missedSamples = 0;
+volatile int skippedSamples = 0;
 
 volatile int results [MAX_RESULTS];
 volatile int results1 [MAX_RESULTS];
@@ -17,48 +19,12 @@ volatile int resultNumber1;
 volatile int resultNumber2;
 volatile int resultNumber3;
 
-volatile int currentPin = 0;
+volatile int currentPin = 1;
+const int displayPin = 1;
+int adcValue [4];
 
 volatile boolean inLoop;
-// ADC complete ISR
-ISR (ADC_vect)
-  {
-    if (resultNumber >= MAX_RESULTS) {
-      Serial.println("BUFFER OVERRUN");
-      return;
-    }
-//    ADCSRA = 0;  // turn off ADC
-//  else
-    if (inLoop)
-      return;
-    switch(currentPin) {
-    case 0:
-      results [resultNumber++] = ADC;
-      ADMUX = bit (REFS0) | (adcPin1 & 7);
-      currentPin = 1;
-      break;
-    case 1:
-    counter++;
-      results1 [resultNumber1++] = ADC;
-      ADMUX = bit (REFS0) | (adcPin2 & 7);
-      currentPin = 2;
-      break;
-    case 2:
-      results2 [resultNumber2++] = ADC;
-      ADMUX = bit (REFS0) | (adcPin3 & 7);
-      currentPin = 3;
-      break;
-    case 3:
-      results3 [resultNumber3++] = ADC;
-      ADMUX = bit (REFS0) | (adcPin0 & 7);
-      currentPin = 0;
-      break;
-  }
-    
-  
-  }  // end of ADC_vect
-  
-EMPTY_INTERRUPT (TIMER1_COMPB_vect);
+
  
 void setup ()
   {
@@ -79,75 +45,99 @@ void setup ()
   ADMUX = bit (REFS0) | (adcPin0 & 7);
   ADCSRB = bit (ADTS0) | bit (ADTS2);  // Timer/Counter1 Compare Match B
   ADCSRA |= bit (ADATE);   // turn on automatic triggering
+} 
 
-  // wait for buffer to fill
-//  while (resultNumber < MAX_RESULTS)
-//    { }
-//    
-//  for (int i = 0; i < MAX_RESULTS; i++)
-//    Serial.println (results [i]);
+// ADC complete ISR
+ISR (ADC_vect) {
+    counter++; 
+    if (inLoop) {
+      missedSamples++;
+      return;
+    }
+    if (resultNumber1 >= MAX_RESULTS) {
+      skippedSamples++;
+      return;
+    }
+
+    switch(currentPin) {
+      case 0:
+        results [resultNumber++] = ADC;
+        ADMUX = bit (REFS0) | (adcPin1 & 7);
+        currentPin = 1;
+        break;
+      case 1:     
+          results1 [resultNumber1++] = ADC;
+        ADMUX = bit (REFS0) | (adcPin2 & 7);
+        currentPin = 2;
+        break;
+      case 2:
+        results2 [resultNumber2++] = ADC;
+        ADMUX = bit (REFS0) | (adcPin3 & 7);
+        currentPin = 3;
+        break;
+      case 3:
+        results3 [resultNumber3++] = ADC;
+        ADMUX = bit (REFS0) | (adcPin0 & 7);
+        currentPin = 0;
+        break;
+    }
+}
   
-}  // end of setup
+EMPTY_INTERRUPT (TIMER1_COMPB_vect);
+
 
 void loop () {
-  go();
-}
-const int displayPin = 1;
-
-int adcValue [4];
-void go () {
+  int result;
+  int samples;
+  
   inLoop = true;
-  int max = 0;
-//  Serial.println (results[0]);
-  for (int i = 0; i < MAX_RESULTS; i++) {
-    if (results[i] > max)
-      max = results[i];
+
+  // tests show this loop causes ~43 missedSamples. The number of samples skipped is less than the number sampled OUTSIDE this loop, so an alternating set of buffers would
+  // recover these otherwise lost samples, but we don't have enough memory to have a complete second set of buffers
+
+  for (int i = 0; i < resultNumber1; i++) {
+    if (results[i] > adcValue[0])
+      adcValue[0] = results[i];
     results[i] = 0;
-  }
-  adcValue[0] = max;
-  max = 0;
-//  Serial.println (results[0]);
-  for (int i = 0; i < MAX_RESULTS; i++) {
-    if (results1[i] > max)
-      max = results1[i];
+
+    if (results1[i] > adcValue[1])
+      adcValue[1] = results1[i];
     results1[i] = 0;
-  }
-  adcValue[1] = max;
-  max = 0;
-//  Serial.println (results[0]);
-  for (int i = 0; i < MAX_RESULTS; i++) {
-    if (results2[i] > max)
-      max = results2[i];
+
+    if (results2[i] > adcValue[2])
+        adcValue[2] = results2[i];
     results2[i] = 0;
-  }
-  adcValue[2] = max;
-  max = 0;
-//  Serial.println (results[0]);
-  for (int i = 0; i < MAX_RESULTS; i++) {
-    if (results3[i] > max)
-      max = results3[i];
+    
+    if (results3[i] > adcValue[2])
+        adcValue[3] = results3[i];
     results3[i] = 0;
   }
-  adcValue[3] = max;
 
-//  Serial.println(resultNumber);
-//  Serial.println(counter);
-  Serial.println (adcValue[displayPin]);
-  
+  samples = resultNumber1;
+  result = adcValue[1];
   resultNumber = resultNumber1 = resultNumber2 = resultNumber3 = 0;
-
-  
   inLoop = false;
+
+  Serial.print (" MissedSamples: ");
+  Serial.print (missedSamples);
+  Serial.print (" SkippedSamples: ");
+  Serial.print (skippedSamples);
+  Serial.print (" Counter: ");
+  Serial.print (counter);
+  Serial.print (" Samples: ");
+  Serial.print (samples);
+  Serial.print (" Result on display pin: ");
+  Serial.print (result);
+  Serial.println ();
+  
+  counter = missedSamples = skippedSamples = 0;
   
 /* This delay is very specific to the frequency of the pieze sensor being monitored.
 // Frequencies below this minimum are not guarenteed to register.
 // A lower minimum increases latency.
+// Keep this delay low enough that the buffers will not overfill, ie, skippedSamples remains 0.
 */
 #define MINIMUM_FREQUENCY 190
-
   delay(1000/MINIMUM_FREQUENCY);
-
-  counter = 0;
   
- 
 }

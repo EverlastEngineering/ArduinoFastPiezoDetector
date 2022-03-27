@@ -59,14 +59,13 @@ void setup ()
 
 // ADC complete ISR
 ISR (ADC_vect) {
-    if (inLoop) {
-      #ifdef SERIAL_PLOT_MODE
-        missedSamples++;
-      #endif
-      return;
-    }
-    
     if (discardCounter == DISCARD) {
+      if (inLoop) {
+        #ifdef SERIAL_PLOT_MODE
+          missedSamples++;
+        #endif
+        return;
+      }
       currentPin++;
       discardCounter = 0;
     }
@@ -106,6 +105,7 @@ void loop () {
   inLoop = false;
 
 #ifndef SERIAL_PLOT_MODE
+  // This is where the real code needs to go to DO something with this.
   for (int i = 0; i<CHANNELS; i++) {
   if (adcValue[i] > MIN_THRESHOLD)
     {
@@ -122,8 +122,8 @@ void loop () {
 // Min / Max for scaling the graph
   Serial.print ("0");
   Serial.print (",80");
-//  Serial.print (",MissedSamples:");
-//  Serial.print (missedSamples);
+  Serial.print (",MissedSamples:");
+  Serial.print (missedSamples);
   Serial.print (",Counted_Samples:"); 
   Serial.print (countedSamples);
   for (int i=0;i<CHANNELS;i++) {
@@ -151,6 +151,7 @@ void loop () {
  *  
  *  The short of it is: tune the system to your expected piezo frequency. This will NOT do higher AND lower freqs perfectly without compromise.
  */
-  
+
+  // on my UNO, 3ms can reliably detect the max value of single peak 100hz sine wave.
   delay(3);
 }

@@ -1,4 +1,4 @@
-//#define SERIAL_PLOT_MODE
+#define SERIAL_PLOT_MODE
 #define MIN_THRESHOLD 150
 
 #define ANALOGPINS 6
@@ -20,29 +20,11 @@ int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
-//EMPTY_INTERRUPT (TIMER1_COMPB_vect);
- 
 void setup ()
   {
   Serial.begin (115200);
   Serial.println ();
   
-  // reset Timer 1
-//  TCCR1A = 0;
-//  TCCR1B = 0;
-//  TCNT1 = 0;
-//  TCCR1B = bit (CS11) | bit (WGM12);  // CTC, prescaler of 8
-//  TIMSK1 = bit (OCIE1B);  // WTF?
-//  OCR1A = 39;    
-//  OCR1B = 39;   // 20 uS - sampling frequency 50 kHz
-//
-//  ADCSRA =  bit (ADEN) | bit (ADIE) | bit (ADIF);   // turn ADC on, want interrupt on completion
-//  ADCSRA |= bit (ADPS2);  // Prescaler of 16
-//  ADMUX = bit (REFS0) | (adcPin[0] & 7);
-//  ADCSRB = bit (ADTS0) | bit (ADTS2);  // Timer/Counter1 Compare Match B
-//  ADCSRA |= bit (ADATE);   // turn on automatic triggering
-
-
   /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
    *  http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
    */
@@ -70,7 +52,7 @@ void setup ()
     maxResults[i]=0;
   }
 
-  for (int i=0;i<6;i++) {
+  for (int i=0;i<ANALOGPINS;i++) {
      pinMode(adcPin[i], INPUT);
   }
 } 
@@ -170,5 +152,5 @@ void loop () {
  *  The short of it is: tune the system to your expected piezo frequency. This will NOT do higher AND lower freqs perfectly without compromise.
  */
   
-  delay(10);
+  delay(3);
 }

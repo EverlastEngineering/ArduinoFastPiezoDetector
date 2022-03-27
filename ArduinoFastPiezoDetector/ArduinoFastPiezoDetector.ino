@@ -1,21 +1,26 @@
-#define SERIAL_PLOT_MODE
+//#define SERIAL_PLOT_MODE
 #define MIN_THRESHOLD 150
+
 #define ANALOGPINS 6
+byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
 
-byte adcPin[ANALOGPINS];
-
-const byte CHANNELS = 6;
+#define CHANNELS 6
 volatile int maxResults[CHANNELS];
 
-volatile int counter = 0;
+#define DISCARD 2
+byte discardCounter = 0;
+
+#ifdef SERIAL_PLOT_MODE
+volatile int countedSamples = 0;
 volatile int missedSamples = 0;
+#endif
 
 byte currentPin = 0;
 int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
-EMPTY_INTERRUPT (TIMER1_COMPB_vect);
+//EMPTY_INTERRUPT (TIMER1_COMPB_vect);
  
 void setup ()
   {
@@ -37,9 +42,14 @@ void setup ()
 //  ADCSRB = bit (ADTS0) | bit (ADTS2);  // Timer/Counter1 Compare Match B
 //  ADCSRA |= bit (ADATE);   // turn on automatic triggering
 
+
+  /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
+   *  http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
+   */
+
   ADCSRA = 0;             // clear ADCSRA register
   ADCSRB = 0;             // clear ADCSRB register
-  ADMUX |= (0 & 0x07);    // set A0 analog input pin
+  ADMUX |= (adcPin[0] & 0x07);    // set A0 analog input pin
   ADMUX |= (1 << REFS0);  // set reference voltage
   ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
 
@@ -54,21 +64,16 @@ void setup ()
   ADCSRA |= (1 << ADEN);  // enable ADC
   ADCSRA |= (1 << ADSC);  // start ADC measurements
 
+  // end code from http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
+
   for (int i=0;i<CHANNELS;i++) {
     maxResults[i]=0;
   }
 
-  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
-  adcPin[0]=0;  
-  adcPin[1]=1;
-  adcPin[2]=2;
-  adcPin[3]=3;
-  adcPin[4]=4;
-  adcPin[5]=5;
+  for (int i=0;i<6;i++) {
+     pinMode(adcPin[i], INPUT);
+  }
 } 
-
-const byte DISCARD = 2;
-byte discardCounter = 0;
 
 // ADC complete ISR
 ISR (ADC_vect) {
@@ -89,7 +94,7 @@ ISR (ADC_vect) {
     }
 
     #ifdef SERIAL_PLOT_MODE
-      counter++; 
+      countedSamples++; 
     #endif
     
     if (currentPin == CHANNELS)
@@ -100,9 +105,9 @@ ISR (ADC_vect) {
     
     byte pin = currentPin+1;
     pin = pin%CHANNELS; // <-- yeah! if the pin is higher than CHANNELS, then "pin MOD CHANNELS" loops it back to 0. 
-    ADMUX = bit (REFS0) | (pin & 7);
+    ADMUX = bit (REFS0) | (adcPin[pin] & 7);
     
-    // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing in time. There must be a compiler optimization that fails.
+    // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing the selected pin; its too slow. There must be a compiler optimization that fails.
 }
   
 void loop () {
@@ -137,24 +142,22 @@ void loop () {
   Serial.print (",80");
 //  Serial.print (",MissedSamples:");
 //  Serial.print (missedSamples);
-  Serial.print (",Counter:"); 
-  Serial.print (counter);
-  Serial.print (",Pin0:");
-  Serial.print (adcValue[0]);
-  Serial.print (",Pin1:");
-  Serial.print (adcValue[1]);
-  Serial.print (",Pin2:");
-  Serial.print (adcValue[2]);
-  Serial.print (",Pin3:");
-  Serial.print (adcValue[3]);
+  Serial.print (",Counted_Samples:"); 
+  Serial.print (countedSamples);
+  for (int i=0;i<CHANNELS;i++) {
+    Serial.print (",Pin_");
+    Serial.print (i);
+    Serial.print (":");
+    Serial.print (adcValue[i]);
+  }
   Serial.println ();
-  counter = missedSamples = 0;
+  countedSamples = missedSamples = 0;
 #endif
 
   
 /*  This delay ensures enough time to prevent aliasing. 
  *  For example:
- *  If counter == 50000 per second, and CHANNELS == 6, then you'll get 8333 samples per second.
+ *  If countedSamples == 50000 per second, and CHANNELS == 6, then you'll get 8333 samples per second.
  *  Half are discarded by the DISCARD system to allow the analog pin to settle.
  *  Half again can be considered discarded by being a negative voltage (unless you either full bridge recitfy (BOOOM) or bias the ac signal, which you should.
  *  In my test, my UNO with 6 channels, i could sample down to 80Hz without missing the peak with a delay of 10, thus getting a stable max value on a sine wave with an acceptable latency.

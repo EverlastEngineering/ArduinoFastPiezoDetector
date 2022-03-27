@@ -23,19 +23,36 @@ void setup ()
   Serial.println ();
   
   // reset Timer 1
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TCNT1 = 0;
-  TCCR1B = bit (CS11) | bit (WGM12);  // CTC, prescaler of 8
-  TIMSK1 = bit (OCIE1B);  // WTF?
-  OCR1A = 39;    
-  OCR1B = 39;   // 20 uS - sampling frequency 50 kHz
+//  TCCR1A = 0;
+//  TCCR1B = 0;
+//  TCNT1 = 0;
+//  TCCR1B = bit (CS11) | bit (WGM12);  // CTC, prescaler of 8
+//  TIMSK1 = bit (OCIE1B);  // WTF?
+//  OCR1A = 39;    
+//  OCR1B = 39;   // 20 uS - sampling frequency 50 kHz
+//
+//  ADCSRA =  bit (ADEN) | bit (ADIE) | bit (ADIF);   // turn ADC on, want interrupt on completion
+//  ADCSRA |= bit (ADPS2);  // Prescaler of 16
+//  ADMUX = bit (REFS0) | (adcPin[0] & 7);
+//  ADCSRB = bit (ADTS0) | bit (ADTS2);  // Timer/Counter1 Compare Match B
+//  ADCSRA |= bit (ADATE);   // turn on automatic triggering
 
-  ADCSRA =  bit (ADEN) | bit (ADIE) | bit (ADIF);   // turn ADC on, want interrupt on completion
-  ADCSRA |= bit (ADPS2);  // Prescaler of 16
-  ADMUX = bit (REFS0) | (adcPin[0] & 7);
-  ADCSRB = bit (ADTS0) | bit (ADTS2);  // Timer/Counter1 Compare Match B
-  ADCSRA |= bit (ADATE);   // turn on automatic triggering
+  ADCSRA = 0;             // clear ADCSRA register
+  ADCSRB = 0;             // clear ADCSRB register
+  ADMUX |= (0 & 0x07);    // set A0 analog input pin
+  ADMUX |= (1 << REFS0);  // set reference voltage
+  ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
+
+  // sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]
+  // for Arduino Uno ADC clock is 16 MHz and a conversion takes 13 clock cycles
+  //ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5 KHz
+//  ADCSRA |= (1 << ADPS2);                     // 16 prescaler for 76.9 KHz
+  ADCSRA |= (1 << ADPS1) | (1 << ADPS0);    // 8 prescaler for 153.8 KHz
+
+  ADCSRA |= (1 << ADATE); // enable auto trigger
+  ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
+  ADCSRA |= (1 << ADEN);  // enable ADC
+  ADCSRA |= (1 << ADSC);  // start ADC measurements
 
   for (int i=0;i<CHANNELS;i++) {
     maxResults[i]=0;
@@ -50,7 +67,7 @@ void setup ()
   adcPin[5]=5;
 } 
 
-const byte DISCARD = 1;
+const byte DISCARD = 4;
 byte discardCounter = 0;
 
 // ADC complete ISR

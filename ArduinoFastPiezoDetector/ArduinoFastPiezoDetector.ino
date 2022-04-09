@@ -1,13 +1,17 @@
-#define SERIAL_PLOT_MODE
+/*
+ * ADC work
+ */
+ 
+// #define SERIAL_PLOT_MODE
 #define MIN_THRESHOLD 150
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
 
-#define CHANNELS 6
+#define CHANNELS 2
 volatile int maxResults[CHANNELS];
 
-#define DISCARD 2
+#define DISCARD 1
 byte discardCounter = 0;
 
 #ifdef SERIAL_PLOT_MODE
@@ -20,9 +24,30 @@ int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
+/*
+ * MIDI setup
+ */
+
+ //MIDI note defines for each trigger
+#define SNARE_NOTE 70
+#define LTOM_NOTE 71
+#define RTOM_NOTE 72
+#define LCYM_NOTE 73
+#define RCYM_NOTE 74
+#define KICK_NOTE 75
+
+//MIDI defines
+#define NOTE_ON_CMD 0x90
+#define NOTE_OFF_CMD 0x80
+#define MAX_MIDI_VELOCITY 127
+
+//MIDI baud rate
+//#define SERIAL_RATE 31250
+#define SERIAL_RATE 38400
+
 void setup ()
   {
-  Serial.begin (115200);
+  Serial.begin (SERIAL_RATE);
   Serial.println ();
   
   /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
@@ -33,12 +58,12 @@ void setup ()
   ADCSRB = 0;             // clear ADCSRB register
   ADMUX |= (adcPin[0] & 0x07);    // set A0 analog input pin
   ADMUX |= (1 << REFS0);  // set reference voltage
-  ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
+//  ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
 
   // sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]
   // for Arduino Uno ADC clock is 16 MHz and a conversion takes 13 clock cycles
-  //ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5 KHz
-  ADCSRA |= (1 << ADPS2);                     // 16 prescaler for 76.9 KHz
+  ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5 KHz
+//  ADCSRA |= (1 << ADPS2);                     // 16 prescaler for 76.9 KHz
 //  ADCSRA |= (1 << ADPS1) | (1 << ADPS0);    // 8 prescaler for 153.8 KHz
 
   ADCSRA |= (1 << ADATE); // enable auto trigger
@@ -90,7 +115,7 @@ ISR (ADC_vect) {
     
     // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing the selected pin; its too slow. There must be a compiler optimization that fails.
 }
-  
+int last = 0;
 void loop () {
 
   // the inLoop boolean prevents the ADC interrupt code from colliding with this loop while the work is done below. keep anything processor intensive OUT of this section of the loop, like Serial output or heavy math.
@@ -107,21 +132,31 @@ void loop () {
 #ifndef SERIAL_PLOT_MODE
   // This is where the real code needs to go to DO something with this.
   for (int i = 0; i<CHANNELS; i++) {
-  if (adcValue[i] > MIN_THRESHOLD)
+//  if (millis() > last + 30) 
+  {
+    last = 0;
+  }
+  if (adcValue[i] > 10 && last == 0)
     {
+      last = millis();
       Serial.print ("Pin");
       Serial.print (i);
       Serial.print (":");
       Serial.print(adcValue[i]);
       Serial.print (",");
+      Serial.print("Last:");
+      Serial.print(last);
+      Serial.print (",");
       Serial.println();
     }
   }
+    
 
 #else
 // Min / Max for scaling the graph
+if (adcValue[0] > 0) {
   Serial.print ("0");
-  Serial.print (",80");
+  Serial.print (",1023");
   Serial.print (",MissedSamples:");
   Serial.print (missedSamples);
   Serial.print (",Counted_Samples:"); 
@@ -133,6 +168,7 @@ void loop () {
     Serial.print (adcValue[i]);
   }
   Serial.println ();
+}
   countedSamples = missedSamples = 0;
 #endif
 
@@ -154,4 +190,28 @@ void loop () {
 
   // on my UNO, 3ms can reliably detect the max value of single peak 100hz sine wave.
   delay(3);
+}
+
+
+void noteFire(unsigned short note, unsigned short velocity)
+{
+  if(velocity > MAX_MIDI_VELOCITY)
+    velocity = MAX_MIDI_VELOCITY;
+  
+  midiNoteOn(note, velocity);
+  midiNoteOff(note, velocity);
+}
+
+void midiNoteOn(byte note, byte midiVelocity)
+{
+  Serial.write(NOTE_ON_CMD);
+  Serial.write(note);
+  Serial.write(midiVelocity);
+}
+
+void midiNoteOff(byte note, byte midiVelocity)
+{
+  Serial.write(NOTE_OFF_CMD);
+  Serial.write(note);
+  Serial.write(midiVelocity);
 }

@@ -2,13 +2,13 @@
  * ADC work
  */
  
-// #define SERIAL_PLOT_MODE
-#define MIN_THRESHOLD 150
+#define SERIAL_PLOT_MODE
+#define MIN_THRESHOLD 20
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
 
-#define CHANNELS 2
+#define CHANNELS 4
 volatile int maxResults[CHANNELS];
 
 #define DISCARD 1
@@ -154,9 +154,15 @@ void loop () {
 
 #else
 // Min / Max for scaling the graph
-if (adcValue[0] > 0) {
-  Serial.print ("0");
-  Serial.print (",1023");
+bool draw = false;
+for (int i=0;i<CHANNELS;i++) {
+  if (adcValue[i] > MIN_THRESHOLD) {
+    draw = true;
+  }
+}
+if (draw) {
+  Serial.print ("Scale:");
+  Serial.print ("1023");
   Serial.print (",MissedSamples:");
   Serial.print (missedSamples);
   Serial.print (",Counted_Samples:"); 
@@ -189,7 +195,7 @@ if (adcValue[0] > 0) {
  */
 
   // on my UNO, 3ms can reliably detect the max value of single peak 100hz sine wave.
-  delay(3);
+  delay(2);
 }
 
 

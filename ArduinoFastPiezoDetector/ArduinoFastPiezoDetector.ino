@@ -2,8 +2,9 @@
  * ADC work
  */
  
-#define SERIAL_PLOT_MODE
-#define MIN_THRESHOLD 20
+// #define SERIAL_PLOT_MODE
+#define MIN_THRESHOLD 20 //discard readings below this adc value
+#define MIN_NOTE_THRESHOLD 30 //minimum time allowed between notes on the same channel
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
@@ -36,10 +37,15 @@ volatile boolean inLoop;
 #define RCYM_NOTE 74
 #define KICK_NOTE 75
 
+byte noteMap[4] = {LCYM_NOTE,SNARE_NOTE,LTOM_NOTE,RCYM_NOTE}; 
+
 //MIDI defines
 #define NOTE_ON_CMD 0x90
 #define NOTE_OFF_CMD 0x80
 #define MAX_MIDI_VELOCITY 127
+
+int timeSinceLastNote[CHANNELS];
+int lastNoteVelocity[CHANNELS];
 
 //MIDI baud rate
 //#define SERIAL_RATE 31250
@@ -115,7 +121,7 @@ ISR (ADC_vect) {
     
     // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing the selected pin; its too slow. There must be a compiler optimization that fails.
 }
-int last = 0;
+unsigned long now = 0;
 void loop () {
 
   // the inLoop boolean prevents the ADC interrupt code from colliding with this loop while the work is done below. keep anything processor intensive OUT of this section of the loop, like Serial output or heavy math.
@@ -131,23 +137,23 @@ void loop () {
 
 #ifndef SERIAL_PLOT_MODE
   // This is where the real code needs to go to DO something with this.
+  now = millis();
   for (int i = 0; i<CHANNELS; i++) {
-//  if (millis() > last + 30) 
-  {
-    last = 0;
-  }
-  if (adcValue[i] > 10 && last == 0)
-    {
-      last = millis();
-      Serial.print ("Pin");
-      Serial.print (i);
-      Serial.print (":");
-      Serial.print(adcValue[i]);
-      Serial.print (",");
-      Serial.print("Last:");
-      Serial.print(last);
-      Serial.print (",");
-      Serial.println();
+    if (adcValue[i] > MIN_THRESHOLD) {
+      byte velocity = adcValue[i] / 8;
+      if (velocity < lastNoteVelocity[i]) {
+        noteDebug(noteMap[i],velocity);
+        timeSinceLastNote[i] = now;
+      }
+      // if ((now-timeSinceLastNote[i]) > MIN_NOTE_THRESHOLD) 
+      {
+      Serial.print("Now: ");
+      Serial.print(now);
+      Serial.print(" TimeSinceLastNote: ");
+      Serial.println(timeSinceLastNote[i]);
+      lastNoteVelocity[i] = velocity;
+      timeSinceLastNote[i] = now;
+      }
     }
   }
     
@@ -198,12 +204,17 @@ if (draw) {
   delay(2);
 }
 
-
-void noteFire(unsigned short note, unsigned short velocity)
+void noteDebug(byte note, byte velocity)
 {
-  if(velocity > MAX_MIDI_VELOCITY)
-    velocity = MAX_MIDI_VELOCITY;
-  
+  Serial.print("Note: ");
+  Serial.print(note);
+  Serial.print(" Velocity: ");
+  Serial.print(velocity);
+  Serial.println();
+}
+
+void noteFire(byte note, byte velocity)
+{
   midiNoteOn(note, velocity);
   midiNoteOff(note, velocity);
 }

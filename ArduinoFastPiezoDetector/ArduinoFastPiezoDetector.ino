@@ -44,7 +44,8 @@ byte noteMap[4] = {LCYM_NOTE,SNARE_NOTE,LTOM_NOTE,RCYM_NOTE};
 #define NOTE_OFF_CMD 0x80
 #define MAX_MIDI_VELOCITY 127
 
-int timeSinceLastNote[CHANNELS];
+unsigned long timeOfLastNote[CHANNELS];
+bool channelArmed[CHANNELS];
 int lastNoteVelocity[CHANNELS];
 
 //MIDI baud rate
@@ -81,6 +82,7 @@ void setup ()
 
   for (int i=0;i<CHANNELS;i++) {
     maxResults[i]=0;
+    timeOfLastNote[i]=0;
   }
 
   for (int i=0;i<ANALOGPINS;i++) {
@@ -140,20 +142,35 @@ void loop () {
   now = millis();
   for (int i = 0; i<CHANNELS; i++) {
     if (adcValue[i] > MIN_THRESHOLD) {
+      long timeSinceLastNote = now - timeOfLastNote[i];
       byte velocity = adcValue[i] / 8;
-      if (velocity < lastNoteVelocity[i]) {
-        noteDebug(noteMap[i],velocity);
-        timeSinceLastNote[i] = now;
+      if (velocity > lastNoteVelocity[i]) {
+        channelArmed[i] = true;
       }
-      // if ((now-timeSinceLastNote[i]) > MIN_NOTE_THRESHOLD) 
+      else if (channelArmed[i]) {
+        if (timeSinceLastNote > MIN_NOTE_THRESHOLD) {
+          noteDebug(noteMap[i],lastNoteVelocity[i]);
+          timeOfLastNote[i] = now;
+        }
+        channelArmed[i] = false;
+      }
+      
+      if (1)
       {
-      Serial.print("Now: ");
+      Serial.print("Channel: ");
+      Serial.print(i);
+      Serial.print(" Velocity: ");
+      Serial.print(velocity);
+      Serial.print(" Now: ");
       Serial.print(now);
-      Serial.print(" TimeSinceLastNote: ");
-      Serial.println(timeSinceLastNote[i]);
-      lastNoteVelocity[i] = velocity;
-      timeSinceLastNote[i] = now;
+      Serial.print(" timeOfLastNote: ");
+      Serial.print(timeOfLastNote[i]);
+      Serial.print(" timeSinceLastNote: ");
+      Serial.println(timeSinceLastNote);
       }
+      lastNoteVelocity[i] = velocity;
+      
+      
     }
   }
     

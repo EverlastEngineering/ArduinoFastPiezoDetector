@@ -72,6 +72,36 @@ void setup ()
   Serial.println ();
 
   midiSerial.begin(31250);
+
+  
+  for (int i=0;i<CHANNELS;i++) {
+    maxResults[i]=0;
+    timeOfLastNote[i]=0;
+  }
+
+  for (int i=0;i<ANALOGPINS;i++) {
+     pinMode(adcPin[i], INPUT);
+  }
+  Serial.println("Startup");
+  delay(100);
+
+  Serial.print("Command: ");
+  // Serial.println(0xC9);
+  midiSerial.write(0xC9);
+  midiSerial.write(0x10);
+
+   /* working kits
+   0x10 = power kit
+   0x18 = electronic 
+   0x28 = brush
+   /*
+  // Serial.print("Command: ");
+  // Serial.println(76);
+ 
+  // Serial.println('Initialized.');
+  // midiSerial.write(0x90);
+  // midiSerial.write(39);
+  // midiSerial.write(80);
   
   /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
    *  http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
@@ -96,20 +126,6 @@ void setup ()
 
   // end code from http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
 
-  for (int i=0;i<CHANNELS;i++) {
-    maxResults[i]=0;
-    timeOfLastNote[i]=0;
-  }
-
-  for (int i=0;i<ANALOGPINS;i++) {
-     pinMode(adcPin[i], INPUT);
-  }
-  delay(2000);
-  int sysex[] = {0xF0 ,0x41, 0x10, 0x42, 0x12, 0x40, 0x19, 0x15, 0x02, 0x10, 0xF7};
-    for (int element : sysex) {
-      midiSerial.write(sysex[element]);
-  }
-  Serial.println ('Initialized.');
 } 
 
 // ADC complete ISR

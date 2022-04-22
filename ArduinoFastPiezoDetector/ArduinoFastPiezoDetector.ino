@@ -4,7 +4,7 @@
  
 // #define SERIAL_PLOT_MODE
 #define MIN_THRESHOLD 20 //discard readings below this adc value
-#define MIN_NOTE_THRESHOLD 30 //minimum time allowed between notes on the same channel
+#define MIN_NOTE_THRESHOLD 40 //minimum time allowed between notes on the same channel
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
@@ -30,19 +30,20 @@ volatile boolean inLoop;
  */
 
  //MIDI note defines for each trigger
-#define SNARE_NOTE 70
+#define SNARE_NOTE 38
 #define LTOM_NOTE 71
 #define RTOM_NOTE 72
-#define LCYM_NOTE 73
+#define HI_HAT_CLOSED_NOTE 42
 #define RCYM_NOTE 74
 #define KICK_NOTE 75
 
-byte noteMap[4] = {LCYM_NOTE,SNARE_NOTE,LTOM_NOTE,RCYM_NOTE}; 
+byte noteMap[4] = {HI_HAT_CLOSED_NOTE,SNARE_NOTE,LTOM_NOTE,RCYM_NOTE}; 
 
 //MIDI defines
-#define NOTE_ON_CMD 0x90
-#define NOTE_OFF_CMD 0x80
+#define NOTE_ON_CMD 0x99
+#define NOTE_OFF_CMD 0x89
 #define MAX_MIDI_VELOCITY 127
+#define NOMINAL_MIDI_VELOCITY 100
 
 unsigned long timeOfLastNote[CHANNELS];
 bool channelArmed[CHANNELS];
@@ -52,10 +53,25 @@ int lastNoteVelocity[CHANNELS];
 //#define SERIAL_RATE 31250
 #define SERIAL_RATE 38400
 
+// MIDI Sample Code
+ #include <AltSoftSerial.h>
+
+AltSoftSerial midiSerial; // 2 is RX, 3 is TX
+int bpm = 72;  // beats per minute
+// duration of a beat in ms
+float beatDuration = 60.0 / bpm * 1000;
+
+// the melody sequence:
+int melody[] = {64, 66, 71, 73, 74, 66, 64, 73, 71, 66, 74, 73};
+// which note of the melody to play:
+int noteCounter = 0;
+
 void setup ()
   {
   Serial.begin (SERIAL_RATE);
   Serial.println ();
+
+  midiSerial.begin(31250);
   
   /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
    *  http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
@@ -88,6 +104,12 @@ void setup ()
   for (int i=0;i<ANALOGPINS;i++) {
      pinMode(adcPin[i], INPUT);
   }
+  delay(2000);
+  int sysex[] = {0xF0 ,0x41, 0x10, 0x42, 0x12, 0x40, 0x19, 0x15, 0x02, 0x10, 0xF7};
+    for (int element : sysex) {
+      midiSerial.write(sysex[element]);
+  }
+  Serial.println ('Initialized.');
 } 
 
 // ADC complete ISR
@@ -149,13 +171,14 @@ void loop () {
       }
       else if (channelArmed[i]) {
         if (timeSinceLastNote > MIN_NOTE_THRESHOLD) {
-          noteDebug(noteMap[i],lastNoteVelocity[i]);
+          noteFire(noteMap[i],lastNoteVelocity[i]);
+          
           timeOfLastNote[i] = now;
         }
         channelArmed[i] = false;
       }
       
-      if (1)
+      if (0)
       {
       Serial.print("Channel: ");
       Serial.print(i);
@@ -170,7 +193,7 @@ void loop () {
       }
       lastNoteVelocity[i] = velocity;
       
-      
+     
     }
   }
     
@@ -219,6 +242,25 @@ if (draw) {
 
   // on my UNO, 3ms can reliably detect the max value of single peak 100hz sine wave.
   delay(2);
+  
+     //here 
+
+      // play a note from the melody:
+      // midiCommand(0x90, melody[noteCounter], 0x7F);
+      
+      // // all the notes in this are sixteenth notes,
+      // // which is 1/4 of a beat, so:
+      // int noteDuration = beatDuration / 4;
+      // // keep it on for the appropriate duration:
+      // delay(noteDuration);
+      // // turn the note off:
+      // midiCommand(0x80, melody[noteCounter], 0);
+     
+      //   // increment the note number for next time through the loop:
+      // noteCounter++;
+      // // keep the note in the range from 0 - 11 using modulo:
+      // noteCounter = noteCounter % 12;
+      // //to here
 }
 
 void noteDebug(byte note, byte velocity)
@@ -232,20 +274,27 @@ void noteDebug(byte note, byte velocity)
 
 void noteFire(byte note, byte velocity)
 {
+  velocity = (velocity / 2) +63; //ugh
   midiNoteOn(note, velocity);
   midiNoteOff(note, velocity);
 }
 
 void midiNoteOn(byte note, byte midiVelocity)
 {
-  Serial.write(NOTE_ON_CMD);
-  Serial.write(note);
-  Serial.write(midiVelocity);
+  midiSerial.write(NOTE_ON_CMD);
+  midiSerial.write(note);
+  midiSerial.write(midiVelocity);
 }
 
 void midiNoteOff(byte note, byte midiVelocity)
 {
-  Serial.write(NOTE_OFF_CMD);
-  Serial.write(note);
-  Serial.write(midiVelocity);
+  midiSerial.write(NOTE_OFF_CMD);
+  midiSerial.write(note);
+  midiSerial.write(midiVelocity);
+}
+
+void midiCommand(byte cmd, byte data1, byte  data2) {
+  midiSerial.write(cmd);     // command byte (should be > 127)
+  midiSerial.write(data1);   // data byte 1 (should be < 128)
+  midiSerial.write(data2);   // data byte 2 (should be < 128)
 }

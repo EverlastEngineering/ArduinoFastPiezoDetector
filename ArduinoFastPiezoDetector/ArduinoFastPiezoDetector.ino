@@ -4,7 +4,7 @@
  
 // #define SERIAL_PLOT_MODE
 #define MIN_THRESHOLD 20 //discard readings below this adc value
-#define MIN_NOTE_THRESHOLD 40 //minimum time allowed between notes on the same channel
+#define MIN_NOTE_THRESHOLD 60 //minimum time allowed between notes on the same channel
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
@@ -34,10 +34,12 @@ volatile boolean inLoop;
 #define LTOM_NOTE 71
 #define RTOM_NOTE 72
 #define HI_HAT_CLOSED_NOTE 42
-#define RCYM_NOTE 74
+#define HI_HAT_OPEN_NOTE 46
+#define PEDAL_HI_HAT_NOTE 44
+#define CRASH 49
 #define KICK_NOTE 75
 
-byte noteMap[4] = {HI_HAT_CLOSED_NOTE,SNARE_NOTE,LTOM_NOTE,RCYM_NOTE}; 
+byte noteMap[4] = {PEDAL_HI_HAT_NOTE,HI_HAT_OPEN_NOTE,LTOM_NOTE,CRASH}; 
 
 //MIDI defines
 #define NOTE_ON_CMD 0x99
@@ -49,12 +51,14 @@ unsigned long timeOfLastNote[CHANNELS];
 bool channelArmed[CHANNELS];
 int lastNoteVelocity[CHANNELS];
 
+#define SEND_BYTES(x) for (byte l : x) { midiSerial.write(l);}
+
 //MIDI baud rate
 //#define SERIAL_RATE 31250
 #define SERIAL_RATE 38400
 
 // MIDI Sample Code
- #include <AltSoftSerial.h>
+#include <AltSoftSerial.h>
 
 AltSoftSerial midiSerial; // 2 is RX, 3 is TX
 int bpm = 72;  // beats per minute
@@ -87,8 +91,38 @@ void setup ()
 
   Serial.print("Command: ");
   // Serial.println(0xC9);
-  midiSerial.write(0xC9);
-  midiSerial.write(0x10);
+  // byte sysex[] = {0xF0, 0x41 ,0x10  ,0x42  ,0x12  ,0x40  ,0x00  ,0x7F  ,0x00  ,0x41  ,0xF7 }
+//F0 41 10 42 12 40 00 7F 00 41 F7
+  
+  // byte sysexReset[] =  { 0xF0,0x41,0x16,0x42,0x12,0x40,0x00,0x7F,0x00,0x41,0xF7 };
+  // SEND_BYTES(sysexReset)
+  // delay (500);
+// //  F0 0A 41 (10) 42 12 40 00 7F 00 41 F7
+  byte assignMode[] =  { 0xF0,0x41,0x10,0x42,0x12,0x40,0x10,0x14,0x02,0x1a,0xF7 };
+// byte assignMode[] = { 0xF0,0x41,0x10,0x42,0x12,0x40,0x00,0x04,0x00,0x3c,0xF7 };
+  SEND_BYTES(assignMode)
+  delay(1000);
+// device id = 16 or 0x10
+  // byte assignMode1[] =  { 0xF0,0x41 };
+  // byte assignMode2[] =  { 0x42,0x12,0x40,0x00,0x04,0x00,0x3c,0xF7 };
+  // for (int i = 15; i<20; i++) {
+  //   SEND_BYTES(assignMode1)
+  //   midiSerial.write(i);
+  //   Serial.println(i);
+  //   SEND_BYTES(assignMode2)
+  //   delay(100);
+  //   noteFire(CRASH,127);
+  //   delay(500);
+  // }
+
+  //F0 7F 7F 04 01 00 72 F7
+  // byte volumte[] =     { 0xF0,0x7F,0x7F,0x04,0x01,0x00,0x7F,0xF7 };
+  // SEND_BYTES(volumte)
+  //F0 41 10 42 12 40 00 7F 00 41 F7 
+  delay (100);
+  // byte setKit[] = {0xC9,0x10};
+  // SEND_BYTES(setKit)
+
 
    /* working kits
    0x10 = power kit
@@ -290,9 +324,10 @@ void noteDebug(byte note, byte velocity)
 
 void noteFire(byte note, byte velocity)
 {
-  velocity = (velocity / 2) +63; //ugh
+  // velocity = 127; //ugh
   midiNoteOn(note, velocity);
   midiNoteOff(note, velocity);
+  noteDebug(note, velocity);
 }
 
 void midiNoteOn(byte note, byte midiVelocity)
@@ -306,7 +341,7 @@ void midiNoteOff(byte note, byte midiVelocity)
 {
   midiSerial.write(NOTE_OFF_CMD);
   midiSerial.write(note);
-  midiSerial.write(midiVelocity);
+  // midiSerial.write(midiVelocity);
 }
 
 void midiCommand(byte cmd, byte data1, byte  data2) {

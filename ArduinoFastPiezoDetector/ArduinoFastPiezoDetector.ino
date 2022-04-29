@@ -5,7 +5,7 @@ AltSoftSerial midiSerial; // 2 is RX, 3 is TX
  * ADC work
  */
  
-#define SERIAL_PLOT_MODE
+// #define SERIAL_PLOT_MODE
 // #define DEBUG
 
 #define MIN_THRESHOLD 30 //discard readings below this adc value
@@ -42,7 +42,7 @@ byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN};
  */
 
 // #define SEND_NOTE_OFF_VELOCITY
-bool hiHatPedalMakesSounds = true;
+bool hiHatPedalMakesOpeningSounds = false;
 
 #define SNARE_NOTE 38
 #define LTOM_NOTE 41
@@ -101,8 +101,8 @@ void setup ()
   delay(500);
 
   // This sets the drum kit.
-  byte setKit[] = {0xC9,0x20};
-  SEND_BYTES(setKit)
+  // byte setKit[] = {0xC9,0x10};
+  // SEND_BYTES(setKit)
 
   /* working kits
   0x10 = power kit aka Phil Collins
@@ -278,10 +278,10 @@ void handleDigitalInput(byte pin, bool pressed) {
   if (pin == KICK_INPUT_PIN && pressed) {
     noteFireLinearVelocity(KICK_NOTE,80);
   }
-  else if (hiHatPedalMakesSounds && pin == HIT_HAT_INPUT_PIN && pressed) {
+  else if (pin == HIT_HAT_INPUT_PIN && pressed) {
     noteFireLinearVelocity(HI_HAT_CLOSED_NOTE,80);
   }
-  else if (hiHatPedalMakesSounds && pin == HIT_HAT_INPUT_PIN && !pressed) {
+  else if (hiHatPedalMakesOpeningSounds && pin == HIT_HAT_INPUT_PIN && !pressed) {
     noteFireLinearVelocity(HI_HAT_OPEN_NOTE,80);
   }
 }

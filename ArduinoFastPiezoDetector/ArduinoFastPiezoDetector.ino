@@ -140,36 +140,31 @@ void setup ()
 
 // ADC complete ISR
 ISR (ADC_vect) {
-    if (discardCounter == DISCARD) {
-      if (inLoop) {
-        #ifdef SERIAL_PLOT_MODE
-          missedSamples++;
-        #endif
-        return;
-      }
-      currentPin++;
-      discardCounter = 0;
-    }
-    else {
-      discardCounter++;
+  if (discardCounter == DISCARD) {
+    if (inLoop) {
+      #ifdef SERIAL_PLOT_MODE
+        missedSamples++;
+      #endif
       return;
     }
-
+    
+    discardCounter = 0;
     #ifdef SERIAL_PLOT_MODE
       countedSamples++; 
     #endif
-    
-    if (currentPin == CHANNELS)
-      currentPin = 0;
 
     if (ADC > maxResults[currentPin])
       maxResults[currentPin] = ADC;
     
-    byte pin = currentPin+1;
-    pin = pin%CHANNELS; // <-- yeah! if the pin is higher than CHANNELS, then "pin MOD CHANNELS" loops it back to 0. 
-    ADMUX = bit (REFS0) | (adcPin[pin] & 7);
-    
-    // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing the selected pin; its too slow. There must be a compiler optimization that fails.
+    currentPin++;
+    currentPin = currentPin%CHANNELS;
+  
+    ADMUX = bit (REFS0) | (adcPin[currentPin] & 7);
+  }
+  else {
+    discardCounter++;
+    return;
+  }
 }
 unsigned long now = 0;
 

@@ -5,7 +5,7 @@ AltSoftSerial midiSerial; // 2 is RX, 3 is TX
  * ADC work
  */
  
-// #define SERIAL_PLOT_MODE
+#define SERIAL_PLOT_MODE
 // #define DEBUG
 
 #define MIN_THRESHOLD 30 //discard readings below this adc value
@@ -185,7 +185,6 @@ void loop () {
 
   inLoop = false;
 
-  #ifndef SERIAL_PLOT_MODE
   // This is where the real code needs to go to DO something with this.
   now = millis();
   for (int i = 0; i<CHANNELS; i++) {
@@ -222,23 +221,22 @@ void loop () {
     }
   }
 
-  #else
-  // Min / Max for scaling the graph
-  bool draw = false;
+  #ifdef SERIAL_PLOT_MODE
+  bool constantlyDraw = true;
   for (int i=0;i<CHANNELS;i++) {
     if (adcValue[i] > MIN_THRESHOLD) {
-      draw = true;
+      constantlyDraw = true;
     }
   }
-  if (draw) {
-    Serial.print ("Scale:");
+  if (constantlyDraw) {
+    Serial.print ("s:");
     Serial.print ("1023");
-    Serial.print (",MissedSamples:");
+    Serial.print (",m:");
     Serial.print (missedSamples);
-    Serial.print (",Counted_Samples:"); 
+    Serial.print (",c:"); 
     Serial.print (countedSamples);
     for (int i=0;i<CHANNELS;i++) {
-      Serial.print (",Pin_");
+      Serial.print (",P");
       Serial.print (i);
       Serial.print (":");
       Serial.print (adcValue[i]);

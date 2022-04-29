@@ -1,9 +1,14 @@
-/*
+#include <AltSoftSerial.h>
+AltSoftSerial midiSerial; // 2 is RX, 3 is TX
+
+/*  
  * ADC work
  */
  
 // #define SERIAL_PLOT_MODE
-#define MIN_THRESHOLD 20 //discard readings below this adc value
+// #define DEBUG
+
+#define MIN_THRESHOLD 30 //discard readings below this adc value
 #define MIN_NOTE_THRESHOLD 60 //minimum time allowed between notes on the same channel
 
 #define ANALOGPINS 6
@@ -25,27 +30,36 @@ int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
+#define DIGITAL_INPUTS 2
+#define KICK_INPUT_PIN 5
+#define HIT_HAT_INPUT_PIN 6
+
+bool buttonPressed[] = {true, true};
+byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN};
+
 /*
  * MIDI setup
  */
 
- //MIDI note defines for each trigger
+// #define SEND_NOTE_OFF_VELOCITY
+bool hiHatPedalMakesSounds = true;
+
 #define SNARE_NOTE 38
-#define LTOM_NOTE 71
-#define RTOM_NOTE 72
+#define LTOM_NOTE 41
+#define RTOM_NOTE 43
 #define HI_HAT_CLOSED_NOTE 42
 #define HI_HAT_OPEN_NOTE 46
 #define PEDAL_HI_HAT_NOTE 44
 #define CRASH 49
-#define KICK_NOTE 75
+#define KICK_NOTE 36
 
-byte noteMap[4] = {PEDAL_HI_HAT_NOTE,HI_HAT_OPEN_NOTE,LTOM_NOTE,CRASH}; 
+byte noteMap[4] = {HI_HAT_OPEN_NOTE,SNARE_NOTE,LTOM_NOTE,CRASH}; 
 
 //MIDI defines
 #define NOTE_ON_CMD 0x99
 #define NOTE_OFF_CMD 0x89
 #define MAX_MIDI_VELOCITY 127
-#define NOMINAL_MIDI_VELOCITY 100
+#define NOMINAL_MIDI_VELOCITY 64
 
 unsigned long timeOfLastNote[CHANNELS];
 bool channelArmed[CHANNELS];
@@ -53,99 +67,61 @@ int lastNoteVelocity[CHANNELS];
 
 #define SEND_BYTES(x) for (byte l : x) { midiSerial.write(l);}
 
-//MIDI baud rate
-//#define SERIAL_RATE 31250
+// MIDI baud rate
+#define MIDI_SERIAL_RATE 31250
 #define SERIAL_RATE 38400
-
-// MIDI Sample Code
-#include <AltSoftSerial.h>
-
-AltSoftSerial midiSerial; // 2 is RX, 3 is TX
-int bpm = 72;  // beats per minute
-// duration of a beat in ms
-float beatDuration = 60.0 / bpm * 1000;
-
-// the melody sequence:
-int melody[] = {64, 66, 71, 73, 74, 66, 64, 73, 71, 66, 74, 73};
-// which note of the melody to play:
-int noteCounter = 0;
 
 void setup ()
   {
+  Serial.println("Startup");
+  
   Serial.begin (SERIAL_RATE);
-  Serial.println ();
-
-  midiSerial.begin(31250);
-
+  midiSerial.begin(MIDI_SERIAL_RATE);
   
   for (int i=0;i<CHANNELS;i++) {
     maxResults[i]=0;
     timeOfLastNote[i]=0;
   }
 
-  for (int i=0;i<ANALOGPINS;i++) {
-     pinMode(adcPin[i], INPUT);
+  for (int i=0;i<DIGITAL_INPUTS;i++) {
+    pinMode(digitalPins[i], INPUT_PULLUP);
   }
-  Serial.println("Startup");
-  delay(100);
 
-  Serial.print("Command: ");
-  // Serial.println(0xC9);
-  // byte sysex[] = {0xF0, 0x41 ,0x10  ,0x42  ,0x12  ,0x40  ,0x00  ,0x7F  ,0x00  ,0x41  ,0xF7 }
-//F0 41 10 42 12 40 00 7F 00 41 F7
-  
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  // FYI the Roland Mt-80s Device ID is 16 - 0x10
+  // GS Mode Reset - Seems to be unnecessary so removed for now
   // byte sysexReset[] =  { 0xF0,0x41,0x16,0x42,0x12,0x40,0x00,0x7F,0x00,0x41,0xF7 };
   // SEND_BYTES(sysexReset)
-  // delay (500);
-// //  F0 0A 41 (10) 42 12 40 00 7F 00 41 F7
+
+  // Use SysEx to Assign Mode to "2" on Channel 10, which allows notes to overlap each other
+  // Otherwise, a new note with a lower velocity will chop the existing note's sustain to the new volume
   byte assignMode[] =  { 0xF0,0x41,0x10,0x42,0x12,0x40,0x10,0x14,0x02,0x1a,0xF7 };
-// byte assignMode[] = { 0xF0,0x41,0x10,0x42,0x12,0x40,0x00,0x04,0x00,0x3c,0xF7 };
   SEND_BYTES(assignMode)
-  delay(1000);
-// device id = 16 or 0x10
-  // byte assignMode1[] =  { 0xF0,0x41 };
-  // byte assignMode2[] =  { 0x42,0x12,0x40,0x00,0x04,0x00,0x3c,0xF7 };
-  // for (int i = 15; i<20; i++) {
-  //   SEND_BYTES(assignMode1)
-  //   midiSerial.write(i);
-  //   Serial.println(i);
-  //   SEND_BYTES(assignMode2)
-  //   delay(100);
-  //   noteFire(CRASH,127);
-  //   delay(500);
-  // }
+  delay(500);
 
-  //F0 7F 7F 04 01 00 72 F7
-  // byte volumte[] =     { 0xF0,0x7F,0x7F,0x04,0x01,0x00,0x7F,0xF7 };
-  // SEND_BYTES(volumte)
-  //F0 41 10 42 12 40 00 7F 00 41 F7 
-  delay (100);
-  // byte setKit[] = {0xC9,0x10};
-  // SEND_BYTES(setKit)
+  // This sets the drum kit.
+  byte setKit[] = {0xC9,0x20};
+  SEND_BYTES(setKit)
+
+  /* working kits
+  0x10 = power kit aka Phil Collins
+  0x18 = electronic 
+  0x19 = moar electronic 
+  0x28 = brush
+  /*
 
 
-   /* working kits
-   0x10 = power kit
-   0x18 = electronic 
-   0x28 = brush
-   /*
-  // Serial.print("Command: ");
-  // Serial.println(76);
- 
-  // Serial.println('Initialized.');
-  // midiSerial.write(0x90);
-  // midiSerial.write(39);
-  // midiSerial.write(80);
-  
-  /* all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
-   *  http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
-   */
+  /* ADC Setup
+  * all the hard work for setting the registers and finding the fastest way to access the adc data was done by this fellow:
+  * http://yaab-arduino.blogspot.com/2015/02/fast-sampling-from-analog-input.html
+  */
 
   ADCSRA = 0;             // clear ADCSRA register
   ADCSRB = 0;             // clear ADCSRB register
   ADMUX |= (adcPin[0] & 0x07);    // set A0 analog input pin
   ADMUX |= (1 << REFS0);  // set reference voltage
-//  ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
+  // ADMUX |= (1 << ADLAR);  // left align ADC value to 8 bits from ADCH register
 
   // sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]
   // for Arduino Uno ADC clock is 16 MHz and a conversion takes 13 clock cycles
@@ -196,7 +172,12 @@ ISR (ADC_vect) {
     // Interestingly, if you combine the (currentPin+1)&CHANNELS on any line, there is often a failure incrementing the selected pin; its too slow. There must be a compiler optimization that fails.
 }
 unsigned long now = 0;
+
 void loop () {
+  // this pulls the LED down and off, its turned on during a midiWrite event at least 2ms ago
+  digitalWrite(LED_BUILTIN, LOW);
+
+  digitalPinScan();
 
   // the inLoop boolean prevents the ADC interrupt code from colliding with this loop while the work is done below. keep anything processor intensive OUT of this section of the loop, like Serial output or heavy math.
   // on an UNO, this loop work occasionally causes ONE sample to be discarded, which is only 1/50,000 of a seconds' worth of data. That's great.
@@ -209,7 +190,7 @@ void loop () {
 
   inLoop = false;
 
-#ifndef SERIAL_PLOT_MODE
+  #ifndef SERIAL_PLOT_MODE
   // This is where the real code needs to go to DO something with this.
   now = millis();
   for (int i = 0; i<CHANNELS; i++) {
@@ -221,15 +202,16 @@ void loop () {
       }
       else if (channelArmed[i]) {
         if (timeSinceLastNote > MIN_NOTE_THRESHOLD) {
-          noteFire(noteMap[i],lastNoteVelocity[i]);
+          handleAnalogEvent(noteMap[i],lastNoteVelocity[i]);
           
           timeOfLastNote[i] = now;
         }
         channelArmed[i] = false;
       }
+      lastNoteVelocity[i] = velocity;
       
-      if (0)
-      {
+      
+      #ifdef DEBUG
       Serial.print("Channel: ");
       Serial.print(i);
       Serial.print(" Velocity: ");
@@ -240,79 +222,78 @@ void loop () {
       Serial.print(timeOfLastNote[i]);
       Serial.print(" timeSinceLastNote: ");
       Serial.println(timeSinceLastNote);
-      }
-      lastNoteVelocity[i] = velocity;
-      
-     
+      #endif
+
     }
   }
-    
 
-#else
-// Min / Max for scaling the graph
-bool draw = false;
-for (int i=0;i<CHANNELS;i++) {
-  if (adcValue[i] > MIN_THRESHOLD) {
-    draw = true;
-  }
-}
-if (draw) {
-  Serial.print ("Scale:");
-  Serial.print ("1023");
-  Serial.print (",MissedSamples:");
-  Serial.print (missedSamples);
-  Serial.print (",Counted_Samples:"); 
-  Serial.print (countedSamples);
+  #else
+  // Min / Max for scaling the graph
+  bool draw = false;
   for (int i=0;i<CHANNELS;i++) {
-    Serial.print (",Pin_");
-    Serial.print (i);
-    Serial.print (":");
-    Serial.print (adcValue[i]);
+    if (adcValue[i] > MIN_THRESHOLD) {
+      draw = true;
+    }
   }
-  Serial.println ();
-}
-  countedSamples = missedSamples = 0;
-#endif
-
+  if (draw) {
+    Serial.print ("Scale:");
+    Serial.print ("1023");
+    Serial.print (",MissedSamples:");
+    Serial.print (missedSamples);
+    Serial.print (",Counted_Samples:"); 
+    Serial.print (countedSamples);
+    for (int i=0;i<CHANNELS;i++) {
+      Serial.print (",Pin_");
+      Serial.print (i);
+      Serial.print (":");
+      Serial.print (adcValue[i]);
+    }
+    Serial.println ();
+  }
+    countedSamples = missedSamples = 0;
+  #endif
   
-/*  This delay ensures enough time to prevent aliasing. 
- *  For example:
- *  If countedSamples == 50000 per second, and CHANNELS == 6, then you'll get 8333 samples per second.
- *  Half are discarded by the DISCARD system to allow the analog pin to settle.
- *  Half again can be considered discarded by being a negative voltage (unless you either full bridge recitfy (BOOOM) or bias the ac signal, which you should.
- *  In my test, my UNO with 6 channels, i could sample down to 80Hz without missing the peak with a delay of 10, thus getting a stable max value on a sine wave with an acceptable latency.
- *  Less channels and higher minimum freq means you can lower this delay.
- *  
- *  Note that at HIGHER piezo freqencies, the sampling algo will break down if they match the sample rate or are multiple of it, due to the sample peak being 'skipped over'.
- *  This can be addressed by sampling one channel at a much higher freq for CHANNEL # of cycles ones, but that can cause slightly less accuracy to get missed at lower freqs occasionally too.
- *  It's more logic in the interrupt though, which is bad.
- *  
- *  The short of it is: tune the system to your expected piezo frequency. This will NOT do higher AND lower freqs perfectly without compromise.
- */
+  /*  This delay ensures enough time to prevent aliasing. 
+  *  For example:
+  *  If countedSamples == 50000 per second, and CHANNELS == 6, then you'll get 8333 samples per second.
+  *  Half are discarded by the DISCARD system to allow the analog pin to settle.
+  *  Half again can be considered discarded by being a negative voltage (unless you either full bridge recitfy (BOOOM) or bias the ac signal, which you should.
+  *  In my test, my UNO with 6 channels, i could sample down to 80Hz without missing the peak with a delay of 10, thus getting a stable max value on a sine wave with an acceptable latency.
+  *  Less channels and higher minimum freq means you can lower this delay.
+  *  
+  *  Note that at HIGHER piezo freqencies, the sampling algo will break down if they match the sample rate or are multiple of it, due to the sample peak being 'skipped over'.
+  *  This can be addressed by sampling one channel at a much higher freq for CHANNEL # of cycles ones, but that can cause slightly less accuracy to get missed at lower freqs occasionally too.
+  *  It's more logic in the interrupt though, which is bad.
+  *  
+  *  The short of it is: tune the system to your expected piezo frequency. This will NOT do higher AND lower freqs perfectly without compromise.
+  */
 
   // on my UNO, 3ms can reliably detect the max value of single peak 100hz sine wave.
   delay(2);
-  
-     //here 
-
-      // play a note from the melody:
-      // midiCommand(0x90, melody[noteCounter], 0x7F);
-      
-      // // all the notes in this are sixteenth notes,
-      // // which is 1/4 of a beat, so:
-      // int noteDuration = beatDuration / 4;
-      // // keep it on for the appropriate duration:
-      // delay(noteDuration);
-      // // turn the note off:
-      // midiCommand(0x80, melody[noteCounter], 0);
-     
-      //   // increment the note number for next time through the loop:
-      // noteCounter++;
-      // // keep the note in the range from 0 - 11 using modulo:
-      // noteCounter = noteCounter % 12;
-      // //to here
 }
 
+void digitalPinScan() {
+  for (int i=0;i<DIGITAL_INPUTS;i++) { // because i hate when other people write this kind of code, i'll put comments for future me
+    if (digitalRead(digitalPins[i]) == !buttonPressed[i]) { // if the pin state doesn't match the stored state
+      handleDigitalInput(digitalPins[i], buttonPressed[i]); // then send the opposite (ie the same as pin state without reading it again)
+      buttonPressed[i] = !buttonPressed[i]; // and flip it
+    }
+  }
+}
+
+void handleDigitalInput(byte pin, bool pressed) {
+  if (pin == KICK_INPUT_PIN && pressed) {
+    noteFireLinearVelocity(KICK_NOTE,80);
+  }
+  else if (hiHatPedalMakesSounds && pin == HIT_HAT_INPUT_PIN && pressed) {
+    noteFireLinearVelocity(HI_HAT_CLOSED_NOTE,80);
+  }
+  else if (hiHatPedalMakesSounds && pin == HIT_HAT_INPUT_PIN && !pressed) {
+    noteFireLinearVelocity(HI_HAT_OPEN_NOTE,80);
+  }
+}
+
+#ifdef DEBUG
 void noteDebug(byte note, byte velocity)
 {
   Serial.print("Note: ");
@@ -321,31 +302,54 @@ void noteDebug(byte note, byte velocity)
   Serial.print(velocity);
   Serial.println();
 }
+#endif
+
+#define VELOCITY_FACTOR 1.5
+// a VELOCITY_FACTOR greater than one removes dynamic range and sets a higher low limit
+// less than one burns your house down and increases dynamic range. you don't want this.
+// 1 makes the range limits 0-127
+// 2 makes the range limits 63-127
+// 3 makes the range limits 85-127
+
+byte correctVelocityCurve(byte velocity) {
+  return (velocity / VELOCITY_FACTOR) + (MAX_MIDI_VELOCITY - (MAX_MIDI_VELOCITY / VELOCITY_FACTOR));
+}
+
+void handleAnalogEvent(byte note, byte velocity) {
+  if (note == HI_HAT_OPEN_NOTE && buttonPressed[1] == false) {
+      note = HI_HAT_CLOSED_NOTE;
+  }
+  noteFire(note, velocity);
+}
 
 void noteFire(byte note, byte velocity)
 {
-  // velocity = 127; //ugh
+  noteFireLinearVelocity(note, correctVelocityCurve(velocity));
+}
+
+void noteFireLinearVelocity(byte note, byte velocity)
+{
   midiNoteOn(note, velocity);
   midiNoteOff(note, velocity);
+  #ifdef DEBUG
   noteDebug(note, velocity);
+  #endif
 }
 
 void midiNoteOn(byte note, byte midiVelocity)
 {
+  digitalWrite(LED_BUILTIN, HIGH);
   midiSerial.write(NOTE_ON_CMD);
   midiSerial.write(note);
   midiSerial.write(midiVelocity);
+  
 }
 
 void midiNoteOff(byte note, byte midiVelocity)
 {
   midiSerial.write(NOTE_OFF_CMD);
   midiSerial.write(note);
-  // midiSerial.write(midiVelocity);
-}
-
-void midiCommand(byte cmd, byte data1, byte  data2) {
-  midiSerial.write(cmd);     // command byte (should be > 127)
-  midiSerial.write(data1);   // data byte 1 (should be < 128)
-  midiSerial.write(data2);   // data byte 2 (should be < 128)
+  #ifdef SEND_NOTE_OFF_VELOCITY 
+  midiSerial.write(midiVelocity); // unread on the MT-80s
+  #endif
 }

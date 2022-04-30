@@ -30,12 +30,12 @@ int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
-#define DIGITAL_INPUTS 2
+#define DIGITAL_INPUTS 6
 #define KICK_INPUT_PIN 5
 #define HIT_HAT_INPUT_PIN 6
 
-bool buttonPressed[] = {true, true};
-byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN};
+bool buttonPressed[] = {true, true, true, true, true, true};
+byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN,2,3,4,7};
 
 /*
  * MIDI setup
@@ -51,9 +51,11 @@ bool hiHatPedalMakesOpeningSounds = false;
 #define HI_HAT_OPEN_NOTE 46
 #define PEDAL_HI_HAT_NOTE 44
 #define CRASH 49
+#define RIDE 51
 #define KICK_NOTE 36
+#define LOWMID_TOM 47//	B1	Low-Mid Tom
 
-byte noteMap[4] = {HI_HAT_OPEN_NOTE,SNARE_NOTE,LTOM_NOTE,CRASH}; 
+byte noteMap[4] = {HI_HAT_CLOSED_NOTE,SNARE_NOTE,LOWMID_TOM,RIDE}; 
 
 //MIDI defines
 #define NOTE_ON_CMD 0x99
@@ -96,7 +98,7 @@ void setup ()
 
   // Use SysEx to Assign Mode to "2" on Channel 10, which allows notes to overlap each other
   // Otherwise, a new note with a lower velocity will chop the existing note's sustain to the new volume
-  byte assignMode[] =  { 0xF0,0x41,0x10,0x42,0x12,0x40,0x10,0x14,0x02,0x1a,0xF7 };
+  byte assignMode[] =  { 0xF0,0x41,0x10,0x42,0x12,0x40,0x10,0x14,0x01,0x1a,0xF7 };
   SEND_BYTES(assignMode)
   delay(500);
 

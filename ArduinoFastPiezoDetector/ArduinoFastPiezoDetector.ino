@@ -30,12 +30,7 @@ int adcValue[CHANNELS];
 
 volatile boolean inLoop;
 
-#define DIGITAL_INPUTS 6
-#define KICK_INPUT_PIN 5
-#define HIT_HAT_INPUT_PIN 6
 
-bool buttonPressed[] = {true, true, true, true, true, true};
-byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN,2,3,4,7};
 
 /*
  * MIDI setup
@@ -44,22 +39,91 @@ byte digitalPins[] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN,2,3,4,7};
 // #define SEND_NOTE_OFF_VELOCITY
 bool hiHatPedalMakesOpeningSounds = false;
 
-#define SNARE_NOTE 38
-#define LTOM_NOTE 41
-#define RTOM_NOTE 43
-#define HI_HAT_CLOSED_NOTE 42
-#define HI_HAT_OPEN_NOTE 46
-#define PEDAL_HI_HAT_NOTE 44
-#define CRASH 49
-#define RIDE 51
-#define KICK_NOTE 36
-#define LOWMID_TOM 47//	B1	Low-Mid Tom
+#define KICK_INPUT_PIN 5
+#define HIT_HAT_INPUT_PIN 6
+#define B_BUTTON 2
+#define RIGHT_BUTTON 2
+#define Y_BUTTON 3
+#define UP_BUTTON 3
+#define X_BUTTON 4
+#define LEFT_BUTTON 4
+#define A_BUTTON 7
+#define DOWN_BUTTON 7
 
-byte noteMap[4] = {HI_HAT_CLOSED_NOTE,SNARE_NOTE,LOWMID_TOM,RIDE}; 
+#define DIGITAL_INPUTS 6
+bool buttonPressed[DIGITAL_INPUTS];
+byte digitalPins[DIGITAL_INPUTS] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN,RIGHT_BUTTON,UP_BUTTON,LEFT_BUTTON,DOWN_BUTTON};
+unsigned long buttonPressedDuration[DIGITAL_INPUTS];
+
+#define HIGH_Q 27 // D#0
+#define SLAP 28 // E0
+#define SCRATCH_PUSH 29 // F0
+#define SCRATCH_PULL 30 // F#0
+#define STICKS 31 // G0
+#define SQUARE_CLICK 32 // G#0
+#define METRONOME_CLICK 33 // A0
+#define METRONOME_BELL 34 // A#0
+#define KICK_DRUM_2 35 // B0
+#define KICK_DRUM_1 36 // C1
+#define SIDE_STICK 37 // C#1
+#define SNARE_DRUM_1 38 // D1
+#define HAND_CLAP 39 // D#1
+#define SNARE_DRUM_2 40 // E1
+#define LOW_TOM_2 41 // F1
+#define CLOSED_HI_HAT 42 // F#1
+#define LOW_TOM_1 43 // G1
+#define PEDAL_HI_HAT 44 // G#1
+#define MID_TOM_2 45 // A1
+#define OPEN_HI_HAT 46 // A#1
+#define MID_TOM_1 47 // B1
+#define HIGH_TOM_2 48 // C2
+#define CRASH_CYMBAL 49 // C#2
+#define HIGH_TOM_1 50 // D2
+#define RIDE_CYMBAL 51 // D#2
+#define CHINESE_CYMBAL 52 // E2
+#define RIDE_BELL 53 // F2
+#define TAMBOURINE 54 // F#2
+#define SPLASH_CYMBAL 55 // G2
+#define COWBELL 56 // G#2
+#define CRASH_CYMBAL_2 57 // A2
+#define VIBRA_SLAP 58 // A#2
+#define RIDE_CYMBAL_2 59 // B2
+#define HIGH_BONGO 60 // C3
+#define LOW_BONGO 61 // C#3
+#define MUTE_HI_CONGA 62 // D3
+#define OPEN_HI_CONGA 63 // D#3
+#define LOW_CONGA 64 // E3
+#define HIGH_TIMBALE 65 // F3
+#define LOW_TIMBALE 66 // F#3
+#define HIGH_AGOGO 67 // G3
+#define LOW_AGOGO 68 // G#3
+#define CABASA 69 // A3
+#define MARACAS 70 // A#3
+#define SHORT_HI_WHISTLE 71 // B3
+#define LONG_LO_WHISTLE 72 // C4
+#define SHORT_GUIRO 73 // C#4
+#define LONG_GUIRO 74 // D4
+#define CLAVES 75 // D#4
+#define HIGH_WOODBLOCK 76 // E4
+#define LOW_WOODBLOCK 77 // F4
+#define MUTE_CUICA 78 // F#4
+#define OPEN_CUICA 79 // G4
+#define MUTE_TRIANGLE 80 // G#4
+#define OPEN_TRIANGLE 81 // A4
+#define SHAKER 82 // A#4
+#define JINGLE_BELL 83 // B4
+#define BELLTREE 84 // C5
+#define CASTANETS 85 // C#5
+#define MUTE_SURDO 86 // D5
+#define OPEN_SURDO 87 // D#5
+
+byte noteMap[4] = {OPEN_HI_HAT,SNARE_DRUM_1,LOW_TOM_2,CRASH_CYMBAL}; 
 
 //MIDI defines
-#define NOTE_ON_CMD 0x99
-#define NOTE_OFF_CMD 0x89
+#define NOTE_ON_CMD 0x90
+#define NOTE_OFF_CMD 0x80
+#define DRUM_CHANNEL 0x09
+#define PIANO_CHANNEL 0x00
 #define MAX_MIDI_VELOCITY 127
 #define NOMINAL_MIDI_VELOCITY 64
 
@@ -87,6 +151,8 @@ void setup ()
 
   for (int i=0;i<DIGITAL_INPUTS;i++) {
     pinMode(digitalPins[i], INPUT_PULLUP);
+    buttonPressed[i] = true;
+    buttonPressedDuration[i] = 0;
   }
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -277,14 +343,21 @@ void digitalPinScan() {
 }
 
 void handleDigitalInput(byte pin, bool pressed) {
+  Serial.println(pin);
+  // pedals
   if (pin == KICK_INPUT_PIN && pressed) {
-    noteFireLinearVelocity(KICK_NOTE,80);
+    noteFireLinearVelocity(KICK_DRUM_1,80, DRUM_CHANNEL);
   }
   else if (pin == HIT_HAT_INPUT_PIN && pressed) {
-    noteFireLinearVelocity(HI_HAT_CLOSED_NOTE,80);
+    noteFireLinearVelocity(PEDAL_HI_HAT,80, DRUM_CHANNEL);
   }
   else if (hiHatPedalMakesOpeningSounds && pin == HIT_HAT_INPUT_PIN && !pressed) {
-    noteFireLinearVelocity(HI_HAT_OPEN_NOTE,80);
+    noteFireLinearVelocity(OPEN_HI_HAT,80, DRUM_CHANNEL);
+  }
+
+  //buttons
+  if (pin == 2) {
+    midiNoteOn(50, 50, PIANO_CHANNEL);
   }
 }
 
@@ -311,38 +384,37 @@ byte correctVelocityCurve(byte velocity) {
 }
 
 void handleAnalogEvent(byte note, byte velocity) {
-  if (note == HI_HAT_OPEN_NOTE && buttonPressed[1] == false) {
-      note = HI_HAT_CLOSED_NOTE;
+  if (note == OPEN_HI_HAT && buttonPressed[1] == false) {
+      note = CLOSED_HI_HAT;
   }
-  noteFire(note, velocity);
+  noteFireLinearVelocity(note, velocity, DRUM_CHANNEL);
 }
 
-void noteFire(byte note, byte velocity)
+void noteFire(byte note, byte velocity, byte channel)
 {
-  noteFireLinearVelocity(note, correctVelocityCurve(velocity));
+  noteFireLinearVelocity(note, correctVelocityCurve(velocity), channel);
 }
 
-void noteFireLinearVelocity(byte note, byte velocity)
+void noteFireLinearVelocity(byte note, byte velocity, byte channel)
 {
-  midiNoteOn(note, velocity);
-  midiNoteOff(note, velocity);
+  midiNoteOn(note, velocity, channel);
+  midiNoteOff(note, velocity, channel);
   #ifdef DEBUG
   noteDebug(note, velocity);
   #endif
 }
 
-void midiNoteOn(byte note, byte midiVelocity)
+void midiNoteOn(byte note, byte midiVelocity, byte channel)
 {
   digitalWrite(LED_BUILTIN, HIGH);
-  midiSerial.write(NOTE_ON_CMD);
+  midiSerial.write(NOTE_ON_CMD + channel);
   midiSerial.write(note);
   midiSerial.write(midiVelocity);
-  
 }
 
-void midiNoteOff(byte note, byte midiVelocity)
+void midiNoteOff(byte note, byte midiVelocity, byte channel)
 {
-  midiSerial.write(NOTE_OFF_CMD);
+  midiSerial.write(NOTE_OFF_CMD + channel);
   midiSerial.write(note);
   #ifdef SEND_NOTE_OFF_VELOCITY 
   midiSerial.write(midiVelocity); // unread on the MT-80s

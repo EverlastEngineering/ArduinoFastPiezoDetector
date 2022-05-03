@@ -10,6 +10,8 @@ AltSoftSerial midiSerial; // 2 is RX, 3 is TX
 
 #define MIN_THRESHOLD 30 //discard readings below this adc value
 #define MIN_NOTE_THRESHOLD 60 //minimum time allowed between notes on the same channel
+#define MIN_BUTTON_HOLD_TIME 1000
+#define BUTTON_HOLD_PROGRAM_TIME 2000
 
 #define ANALOGPINS 6
 byte adcPin[ANALOGPINS] = {0,1,2,3,4,5};  // This relies on A0 being 0, etc, which on the UNO is true. Mapped manually for clarity.
@@ -38,6 +40,8 @@ volatile boolean inLoop;
 
 // #define SEND_NOTE_OFF_VELOCITY
 bool hiHatPedalMakesOpeningSounds = false;
+bool noteProgrammingMode = false;
+byte noteToProgram = 0;
 
 #define KICK_INPUT_PIN 5
 #define HIT_HAT_INPUT_PIN 6
@@ -51,7 +55,7 @@ bool hiHatPedalMakesOpeningSounds = false;
 #define DOWN_BUTTON 7
 
 #define DIGITAL_INPUTS 6
-bool buttonPressed[DIGITAL_INPUTS];
+bool buttonState[DIGITAL_INPUTS];
 byte digitalPins[DIGITAL_INPUTS] = {KICK_INPUT_PIN, HIT_HAT_INPUT_PIN,RIGHT_BUTTON,UP_BUTTON,LEFT_BUTTON,DOWN_BUTTON};
 unsigned long buttonPressedDuration[DIGITAL_INPUTS];
 
@@ -151,8 +155,8 @@ void setup ()
 
   for (int i=0;i<DIGITAL_INPUTS;i++) {
     pinMode(digitalPins[i], INPUT_PULLUP);
-    buttonPressed[i] = true;
-    buttonPressedDuration[i] = 0;
+    buttonState[i] = HIGH;
+    buttonPressedDuration[i] = 0x00;
   }
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -335,15 +339,32 @@ void loop () {
 
 void digitalPinScan() {
   for (int i=0;i<DIGITAL_INPUTS;i++) { // because i hate when other people write this kind of code, i'll put comments for future me
-    if (digitalRead(digitalPins[i]) == !buttonPressed[i]) { // if the pin state doesn't match the stored state
-      handleDigitalInput(digitalPins[i], buttonPressed[i]); // then send the opposite (ie the same as pin state without reading it again)
-      buttonPressed[i] = !buttonPressed[i]; // and flip it
+    if (digitalRead(digitalPins[i]) == !buttonState[i]) { // if the pin state doesn't match the stored state
+      handleDigitalInput(digitalPins[i], buttonState[i]); // then send the opposite (ie the same as pin state without reading it again)
+      buttonState[i] = !buttonState[i]; // and flip it
+    }
+    if (buttonState[i] == LOW) {
+      if (buttonPressedDuration[i]
+          && (millis() - buttonPressedDuration[i]) > MIN_BUTTON_HOLD_TIME
+          && (millis() - buttonPressedDuration[i]) < (MIN_BUTTON_HOLD_TIME + 10)) {
+        playCurrentDrumSound(digitalPins[i]);
+        delay(11);
+      }
+      else if (buttonPressedDuration[i]
+          && (millis() - buttonPressedDuration[i]) > BUTTON_HOLD_PROGRAM_TIME) {
+        noteProgrammingMode = true;
+        buttonPressedDuration[i] = 0;
+        programNotify(HIGH);
+      }
     }
   }
 }
 
 void handleDigitalInput(byte pin, bool pressed) {
+  Serial.print("handleDigitalInput ");
   Serial.println(pin);
+  Serial.print("pressed ");
+  Serial.println(pressed);
   // pedals
   if (pin == KICK_INPUT_PIN && pressed) {
     noteFireLinearVelocity(KICK_DRUM_1,80, DRUM_CHANNEL);
@@ -355,9 +376,39 @@ void handleDigitalInput(byte pin, bool pressed) {
     noteFireLinearVelocity(OPEN_HI_HAT,80, DRUM_CHANNEL);
   }
 
+  if (noteProgrammingMode) {
+    if (pressed) {
+      if (pin == UP_BUTTON) {
+        noteMap[noteToProgram]++;
+        midiNoteOn(noteMap[noteToProgram],64,DRUM_CHANNEL);
+      }
+      else if (pin == DOWN_BUTTON) {
+        noteMap[noteToProgram]--;
+        midiNoteOn(noteMap[noteToProgram],64,DRUM_CHANNEL);
+      }
+      else if (pin == LEFT_BUTTON) {
+        noteProgrammingMode = false;
+        programNotify(LOW);
+      }
+    }
+    return;
+  }
+
   //buttons
-  if (pin == 2) {
-    midiNoteOn(50, 50, PIANO_CHANNEL);
+  for (int i = 0; i < DIGITAL_INPUTS; i++)
+  {
+    if (digitalPins[i] == pin) {
+      if (pressed) {
+        Serial.print("Pin Press at ");
+        Serial.println(millis());
+        buttonPressedDuration[i] = millis();
+      }
+      else {
+        Serial.print("Pin held for ");
+        Serial.println(millis()-buttonPressedDuration[i]);
+        // buttonPressedDuration[i] = 0x00;
+      }
+    }
   }
 }
 
@@ -384,7 +435,7 @@ byte correctVelocityCurve(byte velocity) {
 }
 
 void handleAnalogEvent(byte note, byte velocity) {
-  if (note == OPEN_HI_HAT && buttonPressed[1] == false) {
+  if (note == OPEN_HI_HAT && buttonState[1] == HIGH) {
       note = CLOSED_HI_HAT;
   }
   noteFireLinearVelocity(note, velocity, DRUM_CHANNEL);
@@ -419,4 +470,43 @@ void midiNoteOff(byte note, byte midiVelocity, byte channel)
   #ifdef SEND_NOTE_OFF_VELOCITY 
   midiSerial.write(midiVelocity); // unread on the MT-80s
   #endif
+}
+
+void programNotify(bool up) {
+  if (up) {
+    higherNote();
+    lowerNote();
+  }
+  else {
+    lowerNote();
+    higherNote();
+  }
+}
+
+void higherNote() {
+  midiNoteOn(78,64,PIANO_CHANNEL);
+  delay(200);
+  midiNoteOff(78,64,PIANO_CHANNEL);
+}
+
+void lowerNote() {
+  midiNoteOn(83,64,PIANO_CHANNEL);
+  delay(200);
+  midiNoteOff(83,64,PIANO_CHANNEL);
+}
+
+void playCurrentDrumSound(byte pin) {
+  if (pin == B_BUTTON) {
+    noteToProgram = 0;
+  }
+  else if (pin == Y_BUTTON) {
+    noteToProgram = 1;
+  }
+  else if (pin == X_BUTTON) {
+    noteToProgram = 2;
+  }
+  else if (pin == A_BUTTON) {
+    noteToProgram = 3;
+  }
+  midiNoteOn(noteMap[noteToProgram],64,DRUM_CHANNEL);
 }

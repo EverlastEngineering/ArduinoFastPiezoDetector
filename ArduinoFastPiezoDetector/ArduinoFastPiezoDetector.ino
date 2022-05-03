@@ -238,7 +238,7 @@ ISR (ADC_vect) {
     return;
   }
 }
-unsigned long now = 0;
+
 
 void loop () {
   // this pulls the LED down and off, its turned on during a midiWrite event at least 2ms ago
@@ -258,7 +258,7 @@ void loop () {
   inLoop = false;
 
   // This is where the real code needs to go to DO something with this.
-  now = millis();
+  unsigned long now = millis();
   for (int i = 0; i<CHANNELS; i++) {
     if (adcValue[i] > MIN_THRESHOLD) {
       long timeSinceLastNote = now - timeOfLastNote[i];
@@ -343,7 +343,7 @@ void digitalPinScan() {
       handleDigitalInput(digitalPins[i], buttonState[i]); // then send the opposite (ie the same as pin state without reading it again)
       buttonState[i] = !buttonState[i]; // and flip it
     }
-    if (buttonState[i] == LOW) {
+    if (buttonState[i] == LOW && i > 1) { // if the button is pressed and its not the first two pins
       if (buttonPressedDuration[i]
           && (millis() - buttonPressedDuration[i]) > MIN_BUTTON_HOLD_TIME
           && (millis() - buttonPressedDuration[i]) < (MIN_BUTTON_HOLD_TIME + 10)) {

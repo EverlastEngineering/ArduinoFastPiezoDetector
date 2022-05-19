@@ -1,3 +1,5 @@
+// add "~/Library/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include/avr/iom328p.h" for the uno / mega to help with the missing definitions
+
 #include <AltSoftSerial.h>
 AltSoftSerial midiSerial; // 2 is RX, 3 is TX
 
@@ -435,7 +437,7 @@ byte correctVelocityCurve(byte velocity) {
 }
 
 void handleAnalogEvent(byte note, byte velocity) {
-  if (note == OPEN_HI_HAT && buttonState[1] == HIGH) {
+  if (note == OPEN_HI_HAT && buttonState[1] == LOW) {
       note = CLOSED_HI_HAT;
   }
   noteFireLinearVelocity(note, velocity, DRUM_CHANNEL);
